@@ -2,11 +2,9 @@ package com.example.tradingplatform.api;
 
 import com.example.tradingplatform.auth.AuthService;
 import com.example.tradingplatform.auth.Balance;
-import com.example.tradingplatform.auth.KycStatus;
 import com.example.tradingplatform.auth.User;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -29,7 +27,7 @@ public class AuthController {
 
     @PostMapping("/register")
     public User register(@Valid @RequestBody RegisterRequest request) {
-        return authService.registerTrader(request.username(), request.password(), request.kycText());
+        return authService.registerTrader(request.username(), request.password());
     }
 
     @PostMapping("/login")
@@ -47,15 +45,6 @@ public class AuthController {
         return authService.listUsers(bearerToken(authorization));
     }
 
-    @PostMapping("/kyc/{userId}/decision")
-    public User decideKyc(
-            @RequestHeader("Authorization") String authorization,
-            @PathVariable String userId,
-            @Valid @RequestBody KycDecisionRequest request
-    ) {
-        return authService.decideKyc(bearerToken(authorization), userId, request.status());
-    }
-
     @GetMapping("/balances/{userId}")
     public Balance balance(@RequestHeader("Authorization") String authorization, @PathVariable String userId) {
         return authService.getBalance(bearerToken(authorization), userId);
@@ -68,12 +57,10 @@ public class AuthController {
         return authorization.substring("Bearer ".length());
     }
 
-    public record RegisterRequest(@NotBlank String username, @NotBlank String password, @NotBlank String kycText) {
+    public record RegisterRequest(@NotBlank String username, @NotBlank String password) {
     }
 
     public record LoginRequest(@NotBlank String username, @NotBlank String password) {
     }
 
-    public record KycDecisionRequest(@NotNull KycStatus status) {
-    }
 }

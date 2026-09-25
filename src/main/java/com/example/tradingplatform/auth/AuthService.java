@@ -20,7 +20,6 @@ import java.util.UUID;
 @Service
 public class AuthService {
     public static final String ROLE_TRADER = "TRADER";
-    public static final String ROLE_KYC_REVIEWER = "KYC_REVIEWER";
     public static final String ROLE_AUDITOR = "AUDITOR";
     public static final String ROLE_MARKET = "MARKET";
 
@@ -37,13 +36,13 @@ public class AuthService {
     @PostConstruct
     @Transactional
     public void seedUsers() {
-        seedUser("admin", "admin", Set.of(ROLE_KYC_REVIEWER, ROLE_AUDITOR), KycStatus.APPROVED, "Seed admin account");
-        seedUser("regulator", "regulator", Set.of(ROLE_AUDITOR), KycStatus.APPROVED, "Seed regulator account");
-        seedUser("market", "market", Set.of(ROLE_MARKET), KycStatus.APPROVED, "Internal market maker account");
+        seedUser("admin", "admin", Set.of(ROLE_AUDITOR));
+        seedUser("regulator", "regulator", Set.of(ROLE_AUDITOR));
+        seedUser("market", "market", Set.of(ROLE_MARKET));
     }
 
     @Transactional
-    public User registerTrader(String username, String password, String kycText) {
+    public User registerTrader(String username, String password) {
         if (userRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists");
         }
@@ -52,14 +51,12 @@ public class AuthService {
                 username,
                 password,
                 Set.of(ROLE_TRADER),
-                KycStatus.PENDING,
-                kycText,
                 new BigDecimal("100000.00"),
                 Map.of("STUB", new BigDecimal("100.00")),
                 Instant.now()
         );
         UserEntity saved = userRepository.save(user);
-        auditLogService.write("USER_REGISTERED", Set.of("auth", "kyc"), saved.getId(), "Trader registered with pending KYC: " + username);
+        auditLogService.write("USER_REGISTERED", Set.of("auth"), saved.getId(), "Trader registered: " + username);
         return toUser(saved);
     }
 
@@ -81,20 +78,6 @@ public class AuthService {
         AccessTokenEntity accessToken = accessTokenRepository.findById(token)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid access token"));
         return toAuthenticatedUser(accessToken.getUser());
-    }
-
-    @Transactional
-    public User decideKyc(String reviewerToken, String userId, KycStatus status) {
-        AuthenticatedUser reviewer = authenticate(reviewerToken);
-        requireRole(reviewer, ROLE_KYC_REVIEWER);
-        if (status == KycStatus.PENDING) {
-            throw new IllegalArgumentException("KYC decision must be APPROVED or REJECTED");
-        }
-        UserEntity user = requireAccount(userId);
-        user.setKycStatus(status);
-        UserEntity saved = userRepository.save(user);
-        auditLogService.write("KYC_" + status.name(), Set.of("auth", "kyc"), reviewer.id(), "KYC " + status.name().toLowerCase() + " for user " + saved.getUsername());
-        return toUser(saved);
     }
 
     @Transactional(readOnly = true)
@@ -186,7 +169,7 @@ public class AuthService {
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
     }
 
-    private void seedUser(String username, String password, Set<String> roles, KycStatus status, String kycText) {
+    private void seedUser(String username, String password, Set<String> roles) {
         if (userRepository.existsByUsername(username)) {
             return;
         }
@@ -195,8 +178,6 @@ public class AuthService {
                 username,
                 password,
                 roles,
-                status,
-                kycText,
                 new BigDecimal("1000000.00"),
                 Map.of("STUB", new BigDecimal("1000000.00")),
                 Instant.now()
@@ -204,11 +185,11 @@ public class AuthService {
     }
 
     private User toUser(UserEntity user) {
-        return new User(user.getId(), user.getUsername(), Set.copyOf(user.getRoles()), user.getKycStatus(), user.getKycText(), user.getCreatedAt());
+        return new User(user.getId(), user.getUsername(), Set.copyOf(user.getRoles()), user.getCreatedAt());
     }
 
     private AuthenticatedUser toAuthenticatedUser(UserEntity user) {
-        return new AuthenticatedUser(user.getId(), user.getUsername(), Set.copyOf(user.getRoles()), user.getKycStatus());
+        return new AuthenticatedUser(user.getId(), user.getUsername(), Set.copyOf(user.getRoles()));
     }
 
     private Balance toBalance(UserEntity user) {

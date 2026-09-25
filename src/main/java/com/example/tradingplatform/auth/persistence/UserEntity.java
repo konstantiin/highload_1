@@ -1,12 +1,9 @@
 package com.example.tradingplatform.auth.persistence;
 
-import com.example.tradingplatform.auth.KycStatus;
 import jakarta.persistence.CollectionTable;
 import jakarta.persistence.Column;
 import jakarta.persistence.ElementCollection;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
@@ -38,13 +35,6 @@ public class UserEntity {
     @Column(name = "role", nullable = false)
     private Set<String> roles = new HashSet<>();
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private KycStatus kycStatus;
-
-    @Column(nullable = false, length = 4096)
-    private String kycText;
-
     @Column(nullable = false)
     private BigDecimal cash;
 
@@ -60,13 +50,11 @@ public class UserEntity {
     protected UserEntity() {
     }
 
-    public UserEntity(String id, String username, String password, Set<String> roles, KycStatus kycStatus, String kycText, BigDecimal cash, Map<String, BigDecimal> assets, Instant createdAt) {
+    public UserEntity(String id, String username, String password, Set<String> roles, BigDecimal cash, Map<String, BigDecimal> assets, Instant createdAt) {
         this.id = id;
         this.username = username;
         this.password = password;
         this.roles = new HashSet<>(roles);
-        this.kycStatus = kycStatus;
-        this.kycText = kycText;
         this.cash = cash;
         this.assets = new HashMap<>(assets);
         this.createdAt = createdAt;
@@ -86,18 +74,6 @@ public class UserEntity {
 
     public Set<String> getRoles() {
         return roles;
-    }
-
-    public KycStatus getKycStatus() {
-        return kycStatus;
-    }
-
-    public void setKycStatus(KycStatus kycStatus) {
-        this.kycStatus = kycStatus;
-    }
-
-    public String getKycText() {
-        return kycText;
     }
 
     public BigDecimal getCash() {

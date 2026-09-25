@@ -2,7 +2,6 @@ package com.example.tradingplatform;
 
 import com.example.tradingplatform.auth.AuthService;
 import com.example.tradingplatform.auth.Balance;
-import com.example.tradingplatform.auth.KycStatus;
 import com.example.tradingplatform.auth.User;
 import com.example.tradingplatform.logging.AuditLogService;
 import com.example.tradingplatform.trading.Order;
@@ -17,7 +16,6 @@ import java.math.BigDecimal;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest(properties = "market.stub-generator.initial-delay=600000")
 class TradingPlatformApplicationTests {
@@ -31,21 +29,19 @@ class TradingPlatformApplicationTests {
     AuditLogService auditLogService;
 
     @Test
-    void pendingKycTraderCannotPlaceOrder() {
-        authService.registerTrader("pending-user", "secret", "kyc data");
-        String token = authService.login("pending-user", "secret");
+    void registeredTraderCanPlaceOrderImmediately() {
+        authService.registerTrader("new-trader", "secret");
+        String token = authService.login("new-trader", "secret");
 
-        assertThatThrownBy(() -> tradingService.placeOrder(token, "STUB", OrderSide.BUY, new BigDecimal("10.00"), BigDecimal.ONE))
-                .hasMessageContaining("KYC must be approved");
+        Order order = tradingService.placeOrder(token, "STUB", OrderSide.BUY, new BigDecimal("10.00"), BigDecimal.ONE);
+
+        assertThat(order.status()).isEqualTo(OrderStatus.OPEN);
     }
 
     @Test
     void approvedLimitOrdersMatchAndUpdateBalances() {
-        User buyer = authService.registerTrader("buyer", "secret", "kyc data");
-        User seller = authService.registerTrader("seller", "secret", "kyc data");
-        String adminToken = authService.login("admin", "admin");
-        authService.decideKyc(adminToken, buyer.id(), KycStatus.APPROVED);
-        authService.decideKyc(adminToken, seller.id(), KycStatus.APPROVED);
+        User buyer = authService.registerTrader("buyer", "secret");
+        User seller = authService.registerTrader("seller", "secret");
 
         String buyerToken = authService.login("buyer", "secret");
         String sellerToken = authService.login("seller", "secret");

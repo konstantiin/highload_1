@@ -2,7 +2,6 @@ package com.example.tradingplatform.trading;
 
 import com.example.tradingplatform.auth.AuthService;
 import com.example.tradingplatform.auth.AuthenticatedUser;
-import com.example.tradingplatform.auth.KycStatus;
 import com.example.tradingplatform.logging.AuditLogService;
 import org.springframework.stereotype.Service;
 
@@ -33,9 +32,6 @@ public class TradingService {
 
     public synchronized Order placeOrder(String token, String instrument, OrderSide side, BigDecimal price, BigDecimal quantity) {
         AuthenticatedUser user = authService.authenticate(token);
-        if (user.hasRole(AuthService.ROLE_TRADER) && user.kycStatus() != KycStatus.APPROVED) {
-            throw new IllegalArgumentException("KYC must be approved before trading");
-        }
         return placeOrderForUser(user.id(), instrument, side, price, quantity, false);
     }
 

@@ -57,7 +57,6 @@ def register(args):
     return request("POST", args.base_url, "/api/auth/register", body={
         "username": args.username,
         "password": args.password,
-        "kycText": args.kyc_text,
     })
 
 
@@ -74,12 +73,6 @@ def me(args):
 
 def users(args):
     return request("GET", args.base_url, "/api/auth/users", token=require_token(args))
-
-
-def kyc(args):
-    return request("POST", args.base_url, f"/api/auth/kyc/{args.user_id}/decision", token=require_token(args), body={
-        "status": args.status,
-    })
 
 
 def balance(args):
@@ -129,7 +122,6 @@ def build_parser():
     register_parser = subparsers.add_parser("register")
     register_parser.add_argument("username")
     register_parser.add_argument("password")
-    register_parser.add_argument("kyc_text")
     register_parser.set_defaults(func=register)
 
     login_parser = subparsers.add_parser("login")
@@ -142,11 +134,6 @@ def build_parser():
 
     users_parser = subparsers.add_parser("users")
     users_parser.set_defaults(func=users)
-
-    kyc_parser = subparsers.add_parser("kyc")
-    kyc_parser.add_argument("user_id")
-    kyc_parser.add_argument("status", choices=["APPROVED", "REJECTED"])
-    kyc_parser.set_defaults(func=kyc)
 
     balance_parser = subparsers.add_parser("balance")
     balance_parser.add_argument("user_id")
