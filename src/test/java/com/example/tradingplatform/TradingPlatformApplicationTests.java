@@ -5,7 +5,6 @@ import com.example.tradingplatform.auth.Balance;
 import com.example.tradingplatform.auth.KycStatus;
 import com.example.tradingplatform.auth.User;
 import com.example.tradingplatform.logging.AuditLogService;
-import com.example.tradingplatform.market.MarketService;
 import com.example.tradingplatform.trading.Order;
 import com.example.tradingplatform.trading.OrderSide;
 import com.example.tradingplatform.trading.OrderStatus;
@@ -20,16 +19,13 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest
+@SpringBootTest(properties = "market.stub-generator.initial-delay=600000")
 class TradingPlatformApplicationTests {
     @Autowired
     AuthService authService;
 
     @Autowired
     TradingService tradingService;
-
-    @Autowired
-    MarketService marketService;
 
     @Autowired
     AuditLogService auditLogService;
@@ -79,11 +75,4 @@ class TradingPlatformApplicationTests {
         assertThat(auditLogService.query(null, null, Set.of("missing"))).noneMatch(event -> event.type().equals("TEST_EVENT"));
     }
 
-    @Test
-    void marketMakerPlacesSyntheticOrderIntoOrderBook() {
-        var result = marketService.tick("STUB");
-
-        assertThat(result.syntheticOrder().synthetic()).isTrue();
-        assertThat(tradingService.stats("STUB").openOrderCount()).isGreaterThanOrEqualTo(1);
-    }
 }

@@ -7,6 +7,7 @@ import com.example.tradingplatform.trading.MarketStats;
 import com.example.tradingplatform.trading.Order;
 import com.example.tradingplatform.trading.OrderSide;
 import com.example.tradingplatform.trading.TradingService;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -25,7 +26,12 @@ public class MarketService {
         this.auditLogService = auditLogService;
     }
 
-    public MarketTickResult tick(String instrument) {
+    @Scheduled(fixedDelayString = "${market.stub-generator.delay:10000}", initialDelayString = "${market.stub-generator.initial-delay:10000}")
+    public void generateStubMarketData() {
+        generateSyntheticOrder("STUB");
+    }
+
+    Order generateSyntheticOrder(String instrument) {
         MarketStats stats = tradingService.stats(instrument);
         User marketUser = authService.findFirstByRole(AuthService.ROLE_MARKET)
                 .orElseThrow();
@@ -36,7 +42,7 @@ public class MarketService {
         BigDecimal priceShift = side == OrderSide.SELL ? new BigDecimal("1.01") : new BigDecimal("0.99");
         BigDecimal price = basePrice.multiply(priceShift).setScale(2, RoundingMode.HALF_UP);
         Order order = tradingService.placeSyntheticOrder(marketUser.id(), stats.instrument(), side, price, quantity);
-        auditLogService.write("MARKET_TICK", Set.of("market", "trading"), marketUser.id(), "Market maker placed " + side + " order " + order.id());
-        return new MarketTickResult(stats, order);
+        auditLogService.write("MARKET_DATA_GENERATED", Set.of("market", "trading"), marketUser.id(), "Market data producer placed " + side + " order " + order.id());
+        return order;
     }
 }

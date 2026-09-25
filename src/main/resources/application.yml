@@ -4,3 +4,8 @@ spring:
 
 server:
   port: ${SERVER_PORT:8080}
+
+market:
+  stub-generator:
+    delay: ${MARKET_STUB_GENERATOR_DELAY:10000}
+    initial-delay: ${MARKET_STUB_GENERATOR_INITIAL_DELAY:10000}

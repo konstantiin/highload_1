@@ -6,7 +6,7 @@ First iteration of the trading system from `spec.txt`. The application is a Spri
 
 - `auth`: registration, login, opaque access tokens, users, KYC decisions, cash and asset balances.
 - `trading`: limit order placement/cancellation, order book matching, trades, balance updates.
-- `market`: simulated market maker that reads trading statistics and places synthetic orders into the real order book.
+- `market`: internal market data producer that wakes every 10 seconds and places synthetic orders into the real order book. Later this package can replace the stub generator with a third-party API subscription/client.
 - `logging`: in-memory audit log with time and tag filtering.
 - `api`: REST controllers over the package APIs.
 
@@ -68,12 +68,6 @@ curl -X POST http://localhost:8080/api/trading/orders \
   -H "Authorization: Bearer {traderToken}" \
   -H "Content-Type: application/json" \
   -d '{"instrument":"STUB","side":"BUY","price":100.00,"quantity":1.00}'
-```
-
-Generate one simulated market-maker action:
-
-```bash
-curl -X POST "http://localhost:8080/api/market/tick?instrument=STUB"
 ```
 
 Query audit logs:
