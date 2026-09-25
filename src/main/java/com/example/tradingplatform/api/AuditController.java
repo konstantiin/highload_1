@@ -29,22 +29,16 @@ public class AuditController {
 
     @GetMapping
     public List<AuditEvent> query(
-            @RequestHeader("Authorization") String authorization,
+            @RequestHeader("X-Username") String username,
+            @RequestHeader("X-Password") String password,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @RequestParam(required = false) String tags
     ) {
-        authService.requireRole(authService.authenticate(bearerToken(authorization)), AuthService.ROLE_AUDITOR);
+        authService.requireRole(authService.authenticate(username, password), AuthService.ROLE_AUDITOR);
         Set<String> requiredTags = tags == null || tags.isBlank()
                 ? Set.of()
                 : Arrays.stream(tags.split(",")).map(String::trim).filter(tag -> !tag.isEmpty()).collect(Collectors.toSet());
         return auditLogService.query(from, to, requiredTags);
-    }
-
-    private String bearerToken(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            throw new IllegalArgumentException("Authorization header must use Bearer token");
-        }
-        return authorization.substring("Bearer ".length());
     }
 }

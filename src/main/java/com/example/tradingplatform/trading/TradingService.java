@@ -30,8 +30,8 @@ public class TradingService {
         this.auditLogService = auditLogService;
     }
 
-    public synchronized Order placeOrder(String token, String instrument, OrderSide side, BigDecimal price, BigDecimal quantity) {
-        AuthenticatedUser user = authService.authenticate(token);
+    public synchronized Order placeOrder(String username, String password, String instrument, OrderSide side, BigDecimal price, BigDecimal quantity) {
+        AuthenticatedUser user = authService.authenticate(username, password);
         return placeOrderForUser(user.id(), instrument, side, price, quantity, false);
     }
 
@@ -39,8 +39,8 @@ public class TradingService {
         return placeOrderForUser(marketUserId, instrument, side, price, quantity, true);
     }
 
-    public synchronized Order cancelOrder(String token, String orderId) {
-        AuthenticatedUser user = authService.authenticate(token);
+    public synchronized Order cancelOrder(String username, String password, String orderId) {
+        AuthenticatedUser user = authService.authenticate(username, password);
         Order order = requireOrder(orderId);
         if (!order.userId().equals(user.id()) && !user.hasRole(AuthService.ROLE_AUDITOR)) {
             throw new IllegalArgumentException("Cannot cancel another user's order");
@@ -55,8 +55,8 @@ public class TradingService {
         return cancelled;
     }
 
-    public List<Order> listOrders(String token) {
-        AuthenticatedUser user = authService.authenticate(token);
+    public List<Order> listOrders(String username, String password) {
+        AuthenticatedUser user = authService.authenticate(username, password);
         if (user.hasRole(AuthService.ROLE_AUDITOR)) {
             return ordersById.values().stream().sorted(Comparator.comparing(Order::createdAt)).toList();
         }
@@ -66,8 +66,8 @@ public class TradingService {
                 .toList();
     }
 
-    public List<Trade> listTrades(String token) {
-        AuthenticatedUser user = authService.authenticate(token);
+    public List<Trade> listTrades(String username, String password) {
+        AuthenticatedUser user = authService.authenticate(username, password);
         if (user.hasRole(AuthService.ROLE_AUDITOR)) {
             return List.copyOf(trades);
         }

@@ -31,9 +31,8 @@ class TradingPlatformApplicationTests {
     @Test
     void registeredTraderCanPlaceOrderImmediately() {
         authService.registerTrader("new-trader", "secret");
-        String token = authService.login("new-trader", "secret");
 
-        Order order = tradingService.placeOrder(token, "STUB", OrderSide.BUY, new BigDecimal("10.00"), BigDecimal.ONE);
+        Order order = tradingService.placeOrder("new-trader", "secret", "STUB", OrderSide.BUY, new BigDecimal("10.00"), BigDecimal.ONE);
 
         assertThat(order.status()).isEqualTo(OrderStatus.OPEN);
     }
@@ -43,18 +42,15 @@ class TradingPlatformApplicationTests {
         User buyer = authService.registerTrader("buyer", "secret");
         User seller = authService.registerTrader("seller", "secret");
 
-        String buyerToken = authService.login("buyer", "secret");
-        String sellerToken = authService.login("seller", "secret");
+        tradingService.placeOrder("seller", "secret", "STUB", OrderSide.SELL, new BigDecimal("90.00"), new BigDecimal("2.00"));
+        Order buy = tradingService.placeOrder("buyer", "secret", "STUB", OrderSide.BUY, new BigDecimal("100.00"), new BigDecimal("2.00"));
 
-        tradingService.placeOrder(sellerToken, "STUB", OrderSide.SELL, new BigDecimal("90.00"), new BigDecimal("2.00"));
-        Order buy = tradingService.placeOrder(buyerToken, "STUB", OrderSide.BUY, new BigDecimal("100.00"), new BigDecimal("2.00"));
+        assertThat(tradingService.listTrades("buyer", "secret")).hasSize(1);
+        assertThat(tradingService.listOrders("buyer", "secret").get(0).status()).isEqualTo(OrderStatus.FILLED);
+        assertThat(tradingService.listOrders("seller", "secret").get(0).status()).isEqualTo(OrderStatus.FILLED);
 
-        assertThat(tradingService.listTrades(buyerToken)).hasSize(1);
-        assertThat(tradingService.listOrders(buyerToken).get(0).status()).isEqualTo(OrderStatus.FILLED);
-        assertThat(tradingService.listOrders(sellerToken).get(0).status()).isEqualTo(OrderStatus.FILLED);
-
-        Balance buyerBalance = authService.getBalance(buyerToken, buyer.id());
-        Balance sellerBalance = authService.getBalance(sellerToken, seller.id());
+        Balance buyerBalance = authService.getBalance("buyer", "secret", buyer.id());
+        Balance sellerBalance = authService.getBalance("seller", "secret", seller.id());
 
         assertThat(buyerBalance.assets().get("STUB")).isEqualByComparingTo("102.00");
         assertThat(buyerBalance.cash()).isEqualByComparingTo("99820.00");

@@ -1,7 +1,5 @@
 package com.example.tradingplatform.auth;
 
-import com.example.tradingplatform.auth.persistence.AccessTokenEntity;
-import com.example.tradingplatform.auth.persistence.AccessTokenRepository;
 import com.example.tradingplatform.auth.persistence.UserEntity;
 import com.example.tradingplatform.auth.persistence.UserRepository;
 import com.example.tradingplatform.logging.AuditLogService;
@@ -25,12 +23,10 @@ public class AuthService {
 
     private final AuditLogService auditLogService;
     private final UserRepository userRepository;
-    private final AccessTokenRepository accessTokenRepository;
 
-    public AuthService(AuditLogService auditLogService, UserRepository userRepository, AccessTokenRepository accessTokenRepository) {
+    public AuthService(AuditLogService auditLogService, UserRepository userRepository) {
         this.auditLogService = auditLogService;
         this.userRepository = userRepository;
-        this.accessTokenRepository = accessTokenRepository;
     }
 
     @PostConstruct
@@ -61,28 +57,25 @@ public class AuthService {
     }
 
     @Transactional
-    public String login(String username, String password) {
+    public User login(String username, String password) {
+        AuthenticatedUser user = authenticate(username, password);
+        auditLogService.write("LOGIN_SUCCEEDED", Set.of("auth", "security"), user.id(), "Login succeeded for username: " + username);
+        return findUser(user.id()).orElseThrow();
+    }
+
+    @Transactional(readOnly = true)
+    public AuthenticatedUser authenticate(String username, String password) {
         Optional<UserEntity> user = userRepository.findByUsername(username);
         if (user.isEmpty() || !user.get().getPassword().equals(password)) {
-            auditLogService.write("LOGIN_FAILED", Set.of("auth", "security"), null, "Failed login for username: " + username);
+            auditLogService.write("LOGIN_FAILED", Set.of("auth", "security"), null, "Failed credential check for username: " + username);
             throw new IllegalArgumentException("Invalid credentials");
         }
-        String token = UUID.randomUUID().toString();
-        accessTokenRepository.save(new AccessTokenEntity(token, user.get(), Instant.now()));
-        auditLogService.write("LOGIN_SUCCEEDED", Set.of("auth", "security"), user.get().getId(), "Login succeeded for username: " + username);
-        return token;
+        return toAuthenticatedUser(user.get());
     }
 
     @Transactional(readOnly = true)
-    public AuthenticatedUser authenticate(String token) {
-        AccessTokenEntity accessToken = accessTokenRepository.findById(token)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid access token"));
-        return toAuthenticatedUser(accessToken.getUser());
-    }
-
-    @Transactional(readOnly = true)
-    public Balance getBalance(String token, String userId) {
-        AuthenticatedUser requester = authenticate(token);
+    public Balance getBalance(String username, String password, String userId) {
+        AuthenticatedUser requester = authenticate(username, password);
         if (!requester.id().equals(userId) && !requester.hasRole(ROLE_AUDITOR)) {
             throw new IllegalArgumentException("Insufficient permissions to read this balance");
         }
@@ -139,8 +132,8 @@ public class AuthService {
     }
 
     @Transactional(readOnly = true)
-    public List<User> listUsers(String token) {
-        AuthenticatedUser requester = authenticate(token);
+    public List<User> listUsers(String username, String password) {
+        AuthenticatedUser requester = authenticate(username, password);
         requireRole(requester, ROLE_AUDITOR);
         return userRepository.findAll().stream().map(this::toUser).toList();
     }

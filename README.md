@@ -4,7 +4,7 @@ First iteration of the trading system from `spec.txt`. The application is a Spri
 
 ## Packages
 
-- `auth`: registration, login, opaque access tokens, users, cash and asset balances. User data is stored in PostgreSQL.
+- `auth`: registration, login by plain-text password comparison, users, cash and asset balances. User data is stored in PostgreSQL.
 - `trading`: limit order placement/cancellation, order book matching, trades, balance updates.
 - `market`: internal market data producer that wakes every 10 seconds and places synthetic orders into the real order book. Later this package can replace the stub generator with a third-party API subscription/client.
 - `logging`: in-memory audit log with time and tag filtering.
@@ -21,7 +21,7 @@ The API listens on `http://localhost:8080`.
 Docker Compose starts:
 
 - `trading-platform`: Spring Boot application.
-- `postgres`: PostgreSQL database for users, roles, tokens, cash, and asset balances.
+- `postgres`: PostgreSQL database for users, roles, cash, and asset balances.
 
 The application creates/updates its schema automatically with Hibernate for this first iteration.
 
@@ -43,12 +43,12 @@ You can use the tiny local CLI wrapper instead of raw `curl`:
 
 ```bash
 python tools/trading_cli.py login admin admin
-python tools/trading_cli.py --token {adminToken} users
+python tools/trading_cli.py --username admin --password admin users
 python tools/trading_cli.py register alice alice
-python tools/trading_cli.py --token {traderToken} order BUY 100.00 1.00
+python tools/trading_cli.py --username alice --password alice order BUY 100.00 1.00
 ```
 
-The CLI reads `TRADING_BASE_URL` and `TRADING_TOKEN` if you do not pass `--base-url` or `--token`.
+The CLI reads `TRADING_BASE_URL`, `TRADING_USERNAME`, and `TRADING_PASSWORD` if you do not pass `--base-url`, `--username`, or `--password`.
 
 Register a trader:
 
@@ -70,7 +70,8 @@ Place a limit order:
 
 ```bash
 curl -X POST http://localhost:8080/api/trading/orders \
-  -H "Authorization: Bearer {traderToken}" \
+  -H "X-Username: alice" \
+  -H "X-Password: alice" \
   -H "Content-Type: application/json" \
   -d '{"instrument":"STUB","side":"BUY","price":100.00,"quantity":1.00}'
 ```
@@ -79,5 +80,6 @@ Query audit logs:
 
 ```bash
 curl "http://localhost:8080/api/logs?tags=trading,trade" \
-  -H "Authorization: Bearer {regulatorToken}"
+  -H "X-Username: regulator" \
+  -H "X-Password: regulator"
 ```

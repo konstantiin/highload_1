@@ -14,7 +14,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.Map;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -31,30 +30,23 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public Map<String, String> login(@Valid @RequestBody LoginRequest request) {
-        return Map.of("accessToken", authService.login(request.username(), request.password()));
+    public User login(@Valid @RequestBody LoginRequest request) {
+        return authService.login(request.username(), request.password());
     }
 
     @GetMapping("/me")
-    public Object me(@RequestHeader("Authorization") String authorization) {
-        return authService.authenticate(bearerToken(authorization));
+    public Object me(@RequestHeader("X-Username") String username, @RequestHeader("X-Password") String password) {
+        return authService.authenticate(username, password);
     }
 
     @GetMapping("/users")
-    public List<User> users(@RequestHeader("Authorization") String authorization) {
-        return authService.listUsers(bearerToken(authorization));
+    public List<User> users(@RequestHeader("X-Username") String username, @RequestHeader("X-Password") String password) {
+        return authService.listUsers(username, password);
     }
 
     @GetMapping("/balances/{userId}")
-    public Balance balance(@RequestHeader("Authorization") String authorization, @PathVariable String userId) {
-        return authService.getBalance(bearerToken(authorization), userId);
-    }
-
-    private String bearerToken(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            throw new IllegalArgumentException("Authorization header must use Bearer token");
-        }
-        return authorization.substring("Bearer ".length());
+    public Balance balance(@RequestHeader("X-Username") String username, @RequestHeader("X-Password") String password, @PathVariable String userId) {
+        return authService.getBalance(username, password, userId);
     }
 
     public record RegisterRequest(@NotBlank String username, @NotBlank String password) {

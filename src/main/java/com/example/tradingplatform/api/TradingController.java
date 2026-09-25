@@ -30,35 +30,28 @@ public class TradingController {
     }
 
     @PostMapping("/orders")
-    public Order placeOrder(@RequestHeader("Authorization") String authorization, @Valid @RequestBody PlaceOrderRequest request) {
-        return tradingService.placeOrder(bearerToken(authorization), request.instrument(), request.side(), request.price(), request.quantity());
+    public Order placeOrder(@RequestHeader("X-Username") String username, @RequestHeader("X-Password") String password, @Valid @RequestBody PlaceOrderRequest request) {
+        return tradingService.placeOrder(username, password, request.instrument(), request.side(), request.price(), request.quantity());
     }
 
     @PostMapping("/orders/{orderId}/cancel")
-    public Order cancelOrder(@RequestHeader("Authorization") String authorization, @PathVariable String orderId) {
-        return tradingService.cancelOrder(bearerToken(authorization), orderId);
+    public Order cancelOrder(@RequestHeader("X-Username") String username, @RequestHeader("X-Password") String password, @PathVariable String orderId) {
+        return tradingService.cancelOrder(username, password, orderId);
     }
 
     @GetMapping("/orders")
-    public List<Order> orders(@RequestHeader("Authorization") String authorization) {
-        return tradingService.listOrders(bearerToken(authorization));
+    public List<Order> orders(@RequestHeader("X-Username") String username, @RequestHeader("X-Password") String password) {
+        return tradingService.listOrders(username, password);
     }
 
     @GetMapping("/trades")
-    public List<Trade> trades(@RequestHeader("Authorization") String authorization) {
-        return tradingService.listTrades(bearerToken(authorization));
+    public List<Trade> trades(@RequestHeader("X-Username") String username, @RequestHeader("X-Password") String password) {
+        return tradingService.listTrades(username, password);
     }
 
     @GetMapping("/stats")
     public MarketStats stats(@RequestParam(defaultValue = "STUB") String instrument) {
         return tradingService.stats(instrument);
-    }
-
-    private String bearerToken(String authorization) {
-        if (authorization == null || !authorization.startsWith("Bearer ")) {
-            throw new IllegalArgumentException("Authorization header must use Bearer token");
-        }
-        return authorization.substring("Bearer ".length());
     }
 
     public record PlaceOrderRequest(

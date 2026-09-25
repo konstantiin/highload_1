@@ -11,7 +11,7 @@ from urllib.request import Request, urlopen
 DEFAULT_BASE_URL = "http://localhost:8080"
 
 
-def request(method, base_url, path, token=None, body=None, query=None):
+def request(method, base_url, path, username=None, password=None, body=None, query=None):
     url = base_url.rstrip("/") + path
     if query:
         cleaned = {key: value for key, value in query.items() if value is not None}
@@ -23,8 +23,10 @@ def request(method, base_url, path, token=None, body=None, query=None):
     if body is not None:
         data = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
-    if token:
-        headers["Authorization"] = "Bearer " + token
+    if username:
+        headers["X-Username"] = username
+    if password:
+        headers["X-Password"] = password
 
     try:
         with urlopen(Request(url, data=data, headers=headers, method=method), timeout=20) as response:
@@ -46,11 +48,12 @@ def print_json(value):
     print(json.dumps(value, indent=2, sort_keys=True))
 
 
-def require_token(args):
-    token = args.token or os.getenv("TRADING_TOKEN")
-    if not token:
-        raise SystemExit("Token required. Pass --token or set TRADING_TOKEN.")
-    return token
+def credentials(args):
+    username = args.username or os.getenv("TRADING_USERNAME")
+    password = args.password or os.getenv("TRADING_PASSWORD")
+    if not username or not password:
+        raise SystemExit("Credentials required. Pass --username/--password or set TRADING_USERNAME/TRADING_PASSWORD.")
+    return username, password
 
 
 def register(args):
@@ -68,19 +71,23 @@ def login(args):
 
 
 def me(args):
-    return request("GET", args.base_url, "/api/auth/me", token=require_token(args))
+    username, password = credentials(args)
+    return request("GET", args.base_url, "/api/auth/me", username=username, password=password)
 
 
 def users(args):
-    return request("GET", args.base_url, "/api/auth/users", token=require_token(args))
+    username, password = credentials(args)
+    return request("GET", args.base_url, "/api/auth/users", username=username, password=password)
 
 
 def balance(args):
-    return request("GET", args.base_url, f"/api/auth/balances/{args.user_id}", token=require_token(args))
+    username, password = credentials(args)
+    return request("GET", args.base_url, f"/api/auth/balances/{args.user_id}", username=username, password=password)
 
 
 def place_order(args):
-    return request("POST", args.base_url, "/api/trading/orders", token=require_token(args), body={
+    username, password = credentials(args)
+    return request("POST", args.base_url, "/api/trading/orders", username=username, password=password, body={
         "instrument": args.instrument,
         "side": args.side,
         "price": args.price,
@@ -89,15 +96,18 @@ def place_order(args):
 
 
 def cancel_order(args):
-    return request("POST", args.base_url, f"/api/trading/orders/{args.order_id}/cancel", token=require_token(args))
+    username, password = credentials(args)
+    return request("POST", args.base_url, f"/api/trading/orders/{args.order_id}/cancel", username=username, password=password)
 
 
 def orders(args):
-    return request("GET", args.base_url, "/api/trading/orders", token=require_token(args))
+    username, password = credentials(args)
+    return request("GET", args.base_url, "/api/trading/orders", username=username, password=password)
 
 
 def trades(args):
-    return request("GET", args.base_url, "/api/trading/trades", token=require_token(args))
+    username, password = credentials(args)
+    return request("GET", args.base_url, "/api/trading/trades", username=username, password=password)
 
 
 def stats(args):
@@ -105,7 +115,8 @@ def stats(args):
 
 
 def logs(args):
-    return request("GET", args.base_url, "/api/logs", token=require_token(args), query={
+    username, password = credentials(args)
+    return request("GET", args.base_url, "/api/logs", username=username, password=password, query={
         "from": args.from_time,
         "to": args.to_time,
         "tags": args.tags,
@@ -115,7 +126,8 @@ def logs(args):
 def build_parser():
     parser = argparse.ArgumentParser(description="Small CLI wrapper for the trading platform REST API.")
     parser.add_argument("--base-url", default=os.getenv("TRADING_BASE_URL", DEFAULT_BASE_URL))
-    parser.add_argument("--token", help="Access token. Can also be set as TRADING_TOKEN.")
+    parser.add_argument("--username", help="Username. Can also be set as TRADING_USERNAME.")
+    parser.add_argument("--password", help="Password. Can also be set as TRADING_PASSWORD.")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
