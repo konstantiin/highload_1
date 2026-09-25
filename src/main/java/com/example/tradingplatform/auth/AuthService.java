@@ -1,17 +1,21 @@
 package com.example.tradingplatform.auth;
 
+import com.example.tradingplatform.auth.persistence.AccessTokenEntity;
+import com.example.tradingplatform.auth.persistence.AccessTokenRepository;
+import com.example.tradingplatform.auth.persistence.UserEntity;
+import com.example.tradingplatform.auth.persistence.UserRepository;
 import com.example.tradingplatform.logging.AuditLogService;
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Service
 public class AuthService {
@@ -21,64 +25,79 @@ public class AuthService {
     public static final String ROLE_MARKET = "MARKET";
 
     private final AuditLogService auditLogService;
-    private final Map<String, AccountRecord> usersById = new ConcurrentHashMap<>();
-    private final Map<String, String> userIdsByUsername = new ConcurrentHashMap<>();
-    private final Map<String, String> userIdsByToken = new ConcurrentHashMap<>();
-    private final Map<String, MutableBalance> balancesByUserId = new ConcurrentHashMap<>();
+    private final UserRepository userRepository;
+    private final AccessTokenRepository accessTokenRepository;
 
-    public AuthService(AuditLogService auditLogService) {
+    public AuthService(AuditLogService auditLogService, UserRepository userRepository, AccessTokenRepository accessTokenRepository) {
         this.auditLogService = auditLogService;
+        this.userRepository = userRepository;
+        this.accessTokenRepository = accessTokenRepository;
+    }
+
+    @PostConstruct
+    @Transactional
+    public void seedUsers() {
         seedUser("admin", "admin", Set.of(ROLE_KYC_REVIEWER, ROLE_AUDITOR), KycStatus.APPROVED, "Seed admin account");
         seedUser("regulator", "regulator", Set.of(ROLE_AUDITOR), KycStatus.APPROVED, "Seed regulator account");
         seedUser("market", "market", Set.of(ROLE_MARKET), KycStatus.APPROVED, "Internal market maker account");
     }
 
+    @Transactional
     public User registerTrader(String username, String password, String kycText) {
-        if (userIdsByUsername.containsKey(username)) {
+        if (userRepository.existsByUsername(username)) {
             throw new IllegalArgumentException("Username already exists");
         }
-        String userId = UUID.randomUUID().toString();
-        AccountRecord record = new AccountRecord(userId, username, password, Set.of(ROLE_TRADER), KycStatus.PENDING, kycText, Instant.now());
-        usersById.put(userId, record);
-        userIdsByUsername.put(username, userId);
-        balancesByUserId.put(userId, new MutableBalance(new BigDecimal("100000.00"), new ConcurrentHashMap<>(Map.of("STUB", new BigDecimal("100.00")))));
-        auditLogService.write("USER_REGISTERED", Set.of("auth", "kyc"), userId, "Trader registered with pending KYC: " + username);
-        return record.toUser();
+        UserEntity user = new UserEntity(
+                UUID.randomUUID().toString(),
+                username,
+                password,
+                Set.of(ROLE_TRADER),
+                KycStatus.PENDING,
+                kycText,
+                new BigDecimal("100000.00"),
+                Map.of("STUB", new BigDecimal("100.00")),
+                Instant.now()
+        );
+        UserEntity saved = userRepository.save(user);
+        auditLogService.write("USER_REGISTERED", Set.of("auth", "kyc"), saved.getId(), "Trader registered with pending KYC: " + username);
+        return toUser(saved);
     }
 
+    @Transactional
     public String login(String username, String password) {
-        String userId = userIdsByUsername.get(username);
-        if (userId == null || !usersById.get(userId).password().equals(password)) {
+        Optional<UserEntity> user = userRepository.findByUsername(username);
+        if (user.isEmpty() || !user.get().getPassword().equals(password)) {
             auditLogService.write("LOGIN_FAILED", Set.of("auth", "security"), null, "Failed login for username: " + username);
             throw new IllegalArgumentException("Invalid credentials");
         }
         String token = UUID.randomUUID().toString();
-        userIdsByToken.put(token, userId);
-        auditLogService.write("LOGIN_SUCCEEDED", Set.of("auth", "security"), userId, "Login succeeded for username: " + username);
+        accessTokenRepository.save(new AccessTokenEntity(token, user.get(), Instant.now()));
+        auditLogService.write("LOGIN_SUCCEEDED", Set.of("auth", "security"), user.get().getId(), "Login succeeded for username: " + username);
         return token;
     }
 
+    @Transactional(readOnly = true)
     public AuthenticatedUser authenticate(String token) {
-        String userId = userIdsByToken.get(token);
-        if (userId == null) {
-            throw new IllegalArgumentException("Invalid access token");
-        }
-        return usersById.get(userId).toAuthenticatedUser();
+        AccessTokenEntity accessToken = accessTokenRepository.findById(token)
+                .orElseThrow(() -> new IllegalArgumentException("Invalid access token"));
+        return toAuthenticatedUser(accessToken.getUser());
     }
 
+    @Transactional
     public User decideKyc(String reviewerToken, String userId, KycStatus status) {
         AuthenticatedUser reviewer = authenticate(reviewerToken);
         requireRole(reviewer, ROLE_KYC_REVIEWER);
         if (status == KycStatus.PENDING) {
             throw new IllegalArgumentException("KYC decision must be APPROVED or REJECTED");
         }
-        AccountRecord existing = requireAccount(userId);
-        AccountRecord updated = existing.withKycStatus(status);
-        usersById.put(userId, updated);
-        auditLogService.write("KYC_" + status.name(), Set.of("auth", "kyc"), reviewer.id(), "KYC " + status.name().toLowerCase() + " for user " + existing.username());
-        return updated.toUser();
+        UserEntity user = requireAccount(userId);
+        user.setKycStatus(status);
+        UserEntity saved = userRepository.save(user);
+        auditLogService.write("KYC_" + status.name(), Set.of("auth", "kyc"), reviewer.id(), "KYC " + status.name().toLowerCase() + " for user " + saved.getUsername());
+        return toUser(saved);
     }
 
+    @Transactional(readOnly = true)
     public Balance getBalance(String token, String userId) {
         AuthenticatedUser requester = authenticate(token);
         if (!requester.id().equals(userId) && !requester.hasRole(ROLE_AUDITOR)) {
@@ -87,47 +106,48 @@ public class AuthService {
         return balanceOf(userId);
     }
 
+    @Transactional(readOnly = true)
     public Balance balanceOf(String userId) {
-        MutableBalance balance = requireBalance(userId);
-        return new Balance(balance.cash(), Map.copyOf(balance.assets()));
+        return toBalance(requireAccount(userId));
     }
 
-    public void reserveCash(String userId, BigDecimal amount) {
-        MutableBalance balance = requireBalance(userId);
-        synchronized (balance) {
-            if (balance.cash().compareTo(amount) < 0) {
-                throw new IllegalArgumentException("Insufficient cash balance");
-            }
-            balance.setCash(balance.cash().subtract(amount));
+    @Transactional
+    public synchronized void reserveCash(String userId, BigDecimal amount) {
+        UserEntity user = requireAccount(userId);
+        if (user.getCash().compareTo(amount) < 0) {
+            throw new IllegalArgumentException("Insufficient cash balance");
         }
+        user.setCash(user.getCash().subtract(amount));
+        userRepository.save(user);
     }
 
-    public void releaseCash(String userId, BigDecimal amount) {
-        MutableBalance balance = requireBalance(userId);
-        synchronized (balance) {
-            balance.setCash(balance.cash().add(amount));
+    @Transactional
+    public synchronized void releaseCash(String userId, BigDecimal amount) {
+        UserEntity user = requireAccount(userId);
+        user.setCash(user.getCash().add(amount));
+        userRepository.save(user);
+    }
+
+    @Transactional
+    public synchronized void reserveAsset(String userId, String instrument, BigDecimal quantity) {
+        UserEntity user = requireAccount(userId);
+        BigDecimal available = user.getAssets().getOrDefault(instrument, BigDecimal.ZERO);
+        if (available.compareTo(quantity) < 0) {
+            throw new IllegalArgumentException("Insufficient asset balance");
         }
+        user.getAssets().put(instrument, available.subtract(quantity));
+        userRepository.save(user);
     }
 
-    public void reserveAsset(String userId, String instrument, BigDecimal quantity) {
-        MutableBalance balance = requireBalance(userId);
-        synchronized (balance) {
-            BigDecimal available = balance.assets().getOrDefault(instrument, BigDecimal.ZERO);
-            if (available.compareTo(quantity) < 0) {
-                throw new IllegalArgumentException("Insufficient asset balance");
-            }
-            balance.assets().put(instrument, available.subtract(quantity));
-        }
+    @Transactional
+    public synchronized void releaseAsset(String userId, String instrument, BigDecimal quantity) {
+        UserEntity user = requireAccount(userId);
+        user.getAssets().merge(instrument, quantity, BigDecimal::add);
+        userRepository.save(user);
     }
 
-    public void releaseAsset(String userId, String instrument, BigDecimal quantity) {
-        MutableBalance balance = requireBalance(userId);
-        synchronized (balance) {
-            balance.assets().merge(instrument, quantity, BigDecimal::add);
-        }
-    }
-
-    public void applyTrade(String buyerUserId, String sellerUserId, String instrument, BigDecimal quantity, BigDecimal price) {
+    @Transactional
+    public synchronized void applyTrade(String buyerUserId, String sellerUserId, String instrument, BigDecimal quantity, BigDecimal price) {
         BigDecimal cash = price.multiply(quantity);
         releaseAsset(buyerUserId, instrument, quantity);
         releaseCash(sellerUserId, cash);
@@ -135,21 +155,24 @@ public class AuthService {
         auditLogService.write("BALANCE_CHANGED", Set.of("auth", "trading", "balance"), sellerUserId, "Seller received " + cash + " cash");
     }
 
+    @Transactional(readOnly = true)
     public List<User> listUsers(String token) {
         AuthenticatedUser requester = authenticate(token);
         requireRole(requester, ROLE_AUDITOR);
-        return usersById.values().stream().map(AccountRecord::toUser).collect(ArrayList::new, ArrayList::add, ArrayList::addAll);
+        return userRepository.findAll().stream().map(this::toUser).toList();
     }
 
+    @Transactional(readOnly = true)
     public Optional<User> findFirstByRole(String role) {
-        return usersById.values().stream()
-                .filter(user -> user.roles().contains(role))
+        return userRepository.findAll().stream()
+                .filter(user -> user.getRoles().contains(role))
                 .findFirst()
-                .map(AccountRecord::toUser);
+                .map(this::toUser);
     }
 
+    @Transactional(readOnly = true)
     public Optional<User> findUser(String userId) {
-        return Optional.ofNullable(usersById.get(userId)).map(AccountRecord::toUser);
+        return userRepository.findById(userId).map(this::toUser);
     }
 
     public void requireRole(AuthenticatedUser user, String role) {
@@ -158,63 +181,37 @@ public class AuthService {
         }
     }
 
-    private AccountRecord requireAccount(String userId) {
-        AccountRecord record = usersById.get(userId);
-        if (record == null) {
-            throw new IllegalArgumentException("User not found");
-        }
-        return record;
-    }
-
-    private MutableBalance requireBalance(String userId) {
-        MutableBalance balance = balancesByUserId.get(userId);
-        if (balance == null) {
-            throw new IllegalArgumentException("Balance not found");
-        }
-        return balance;
+    private UserEntity requireAccount(String userId) {
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
     }
 
     private void seedUser(String username, String password, Set<String> roles, KycStatus status, String kycText) {
-        String userId = UUID.randomUUID().toString();
-        AccountRecord record = new AccountRecord(userId, username, password, roles, status, kycText, Instant.now());
-        usersById.put(userId, record);
-        userIdsByUsername.put(username, userId);
-        balancesByUserId.put(userId, new MutableBalance(new BigDecimal("1000000.00"), new ConcurrentHashMap<>(Map.of("STUB", new BigDecimal("1000000.00")))));
+        if (userRepository.existsByUsername(username)) {
+            return;
+        }
+        userRepository.save(new UserEntity(
+                UUID.randomUUID().toString(),
+                username,
+                password,
+                roles,
+                status,
+                kycText,
+                new BigDecimal("1000000.00"),
+                Map.of("STUB", new BigDecimal("1000000.00")),
+                Instant.now()
+        ));
     }
 
-    private record AccountRecord(String id, String username, String password, Set<String> roles, KycStatus kycStatus, String kycText, Instant createdAt) {
-        User toUser() {
-            return new User(id, username, roles, kycStatus, kycText, createdAt);
-        }
-
-        AuthenticatedUser toAuthenticatedUser() {
-            return new AuthenticatedUser(id, username, roles, kycStatus);
-        }
-
-        AccountRecord withKycStatus(KycStatus status) {
-            return new AccountRecord(id, username, password, roles, status, kycText, createdAt);
-        }
+    private User toUser(UserEntity user) {
+        return new User(user.getId(), user.getUsername(), Set.copyOf(user.getRoles()), user.getKycStatus(), user.getKycText(), user.getCreatedAt());
     }
 
-    private static final class MutableBalance {
-        private BigDecimal cash;
-        private final Map<String, BigDecimal> assets;
+    private AuthenticatedUser toAuthenticatedUser(UserEntity user) {
+        return new AuthenticatedUser(user.getId(), user.getUsername(), Set.copyOf(user.getRoles()), user.getKycStatus());
+    }
 
-        private MutableBalance(BigDecimal cash, Map<String, BigDecimal> assets) {
-            this.cash = cash;
-            this.assets = assets;
-        }
-
-        BigDecimal cash() {
-            return cash;
-        }
-
-        void setCash(BigDecimal cash) {
-            this.cash = cash;
-        }
-
-        Map<String, BigDecimal> assets() {
-            return assets;
-        }
+    private Balance toBalance(UserEntity user) {
+        return new Balance(user.getCash(), Map.copyOf(user.getAssets()));
     }
 }

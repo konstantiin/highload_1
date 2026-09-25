@@ -1,6 +1,14 @@
 spring:
   application:
     name: trading-platform
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/trading_platform}
+    username: ${SPRING_DATASOURCE_USERNAME:trading}
+    password: ${SPRING_DATASOURCE_PASSWORD:trading}
+  jpa:
+    hibernate:
+      ddl-auto: update
+    open-in-view: false
 
 server:
   port: ${SERVER_PORT:8080}

@@ -4,7 +4,7 @@ First iteration of the trading system from `spec.txt`. The application is a Spri
 
 ## Packages
 
-- `auth`: registration, login, opaque access tokens, users, KYC decisions, cash and asset balances.
+- `auth`: registration, login, opaque access tokens, users, KYC decisions, cash and asset balances. User data is stored in PostgreSQL.
 - `trading`: limit order placement/cancellation, order book matching, trades, balance updates.
 - `market`: internal market data producer that wakes every 10 seconds and places synthetic orders into the real order book. Later this package can replace the stub generator with a third-party API subscription/client.
 - `logging`: in-memory audit log with time and tag filtering.
@@ -17,6 +17,13 @@ docker compose up --build
 ```
 
 The API listens on `http://localhost:8080`.
+
+Docker Compose starts:
+
+- `trading-platform`: Spring Boot application.
+- `postgres`: PostgreSQL database for users, roles, KYC data, tokens, cash, and asset balances.
+
+The application creates/updates its schema automatically with Hibernate for this first iteration.
 
 ## Seed Accounts
 
@@ -35,6 +42,17 @@ Registered traders start with:
 KYC must be `APPROVED` before a trader can place orders. This is the conservative behavior for the first iteration.
 
 ## Example Flow
+
+You can use the tiny local CLI wrapper instead of raw `curl`:
+
+```bash
+python tools/trading_cli.py login admin admin
+python tools/trading_cli.py --token {adminToken} users
+python tools/trading_cli.py register alice alice "passport data"
+python tools/trading_cli.py --token {traderToken} order BUY 100.00 1.00
+```
+
+The CLI reads `TRADING_BASE_URL` and `TRADING_TOKEN` if you do not pass `--base-url` or `--token`.
 
 Register a trader:
 
